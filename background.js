@@ -1,19 +1,98 @@
-// Background script - coordinates between content script and popup
+// Background script - uses webRequest to capture ALL network traffic
 
-// Store for collected schema data
 let schemaData = {
-  queries: {},      // Query name -> { fields, variables }
-  mutations: {},   // Mutation name -> { fields, variables }
-  types: {},       // Inferred types from responses
+  queries: {},
+  mutations: {},
+  types: {},
   endpoints: new Set(),
   requestCount: 0
 };
 
-// Listen for messages from content script
+// Intercept all web requests
+chrome.webRequest.onBeforeRequest.addListener(
+  async (details) => {
+    if (details.method !== 'POST') return;
+    
+    try {
+      // Try to parse the request body
+      const body = details.requestBody;
+      if (!body || !body.formData) return;
+      
+      const formData = body.formData;
+      const queryStr = formData.query?.[0] || formData.variables?.[0];
+      
+      if (!queryStr || typeof queryStr !== 'string') return;
+      
+      // Check if it looks like GraphQL
+      if (!queryStr.includes('query') && !queryStr.includes('mutation')) return;
+      
+      // Parse the GraphQL request
+      let query = queryStr;
+      let operationName = '';
+      let operationType = 'query';
+      let variables = {};
+      
+      try {
+        const parsed = JSON.parse(queryStr);
+        query = parsed.query || queryStr;
+        operationName = parsed.operationName || '';
+        variables = parsed.variables || {};
+        
+        if (query.trim().startsWith('mutation')) {
+          operationType = 'mutation';
+        } else if (query.trim().startsWith('subscription')) {
+          operationType = 'subscription';
+        }
+      } catch (e) {}
+      
+      // Extract fields from query
+      const fields = extractFields(query);
+      
+      // Store
+      const store = operationType === 'mutation' ? schemaData.mutations : schemaData.queries;
+      const opName = operationName || 'anonymous';
+      
+      if (!store[opName]) {
+        store[opName] = {
+          fields: fields,
+          variables: variables,
+          count: 0,
+          firstSeen: new Date().toISOString()
+        };
+      }
+      
+      store[opName].count++;
+      store[opName].lastSeen = new Date().toISOString();
+      schemaData.requestCount++;
+      schemaData.endpoints.add(details.url);
+      
+      // Update badge
+      chrome.action.setBadgeText({ text: String(schemaData.requestCount) });
+      chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+      
+      console.log('[GraphQL Schema Digger] Captured:', operationType, opName);
+      
+    } catch (e) {
+      // Silent fail
+    }
+  },
+  { urls: ["<all_urls>"] },
+  ["requestBody"]
+);
+
+function extractFields(query) {
+  const fields = new Set();
+  const fieldRegex = /^\s*(\w+)\s*[{(]/gm;
+  let match;
+  while ((match = fieldRegex.exec(query)) !== null) {
+    fields.add(match[1]);
+  }
+  return Array.from(fields);
+}
+
+// Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'graphql-request') {
-    handleGraphQLRequest(message.data, sender.tab);
-  } else if (message.type === 'get-schema') {
+  if (message.type === 'get-schema') {
     sendResponse(formatSchema());
   } else if (message.type === 'clear-schema') {
     schemaData = {
@@ -23,107 +102,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       endpoints: new Set(),
       requestCount: 0
     };
+    chrome.action.setBadgeText({ text: '' });
     sendResponse({ success: true });
   }
   return true;
 });
-
-function handleGraphQLRequest(data, tab) {
-  schemaData.requestCount++;
-  schemaData.endpoints.add(data.endpoint);
-  
-  const operationType = data.operationType || 'query';
-  const operationName = data.operationName || 'anonymous';
-  
-  // Extract fields from the query
-  const fields = extractFields(data.query);
-  
-  // Store by operation name (deduplicates repeated queries)
-  const store = operationType === 'mutation' ? schemaData.mutations : schemaData.queries;
-  
-  if (!store[operationName]) {
-    store[operationName] = {
-      fields: fields,
-      variables: data.variables || {},
-      count: 0,
-      firstSeen: new Date().toISOString()
-    };
-  }
-  
-  store[operationName].count++;
-  store[operationName].lastSeen = new Date().toISOString();
-  
-  // Try to infer types from response
-  if (data.response) {
-    inferTypes(data.response, operationName, operationType);
-  }
-  
-  // Update badge to show activity
-  chrome.action.setBadgeText({ 
-    text: String(schemaData.requestCount),
-    tabId: tab.id
-  });
-  chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
-}
-
-function extractFields(query) {
-  // Simple field extraction from GraphQL query string
-  const fields = new Set();
-  
-  // Match field names at the top level (simple approach)
-  const fieldRegex = /^\s*(\w+)\s*[{(]/gm;
-  let match;
-  while ((match = fieldRegex.exec(query)) !== null) {
-    fields.add(match[1]);
-  }
-  
-  // Also capture simple field names
-  const simpleFieldRegex = /^\s*(\w+)\s*$/gm;
-  while ((match = simpleFieldRegex.exec(query)) !== null) {
-    fields.add(match[1]);
-  }
-  
-  return Array.from(fields);
-}
-
-function inferTypes(response, operationName, operationType) {
-  // Try to extract type information from response
-  if (!response.data) return;
-  
-  function traverse(obj, path = '') {
-    if (!obj || typeof obj !== 'object') return;
-    
-    for (const [key, value] of Object.entries(obj)) {
-      const currentPath = path ? `${path}.${key}` : key;
-      
-      if (Array.isArray(value)) {
-        if (value.length > 0 && typeof value[0] === 'object') {
-          schemaData.types[key] = {
-            kind: 'list',
-            ofType: inferType(value[0])
-          };
-          traverse(value[0], currentPath);
-        } else {
-          schemaData.types[key] = { kind: 'list', ofType: typeof value[0] };
-        }
-      } else if (typeof value === 'object') {
-        schemaData.types[key] = { kind: 'object', fields: Object.keys(value) };
-        traverse(value, currentPath);
-      } else {
-        schemaData.types[key] = { kind: typeof value, value: String(value).slice(0, 50) };
-      }
-    }
-  }
-  
-  traverse(response.data);
-}
-
-function inferType(obj) {
-  if (!obj) return 'null';
-  if (Array.isArray(obj)) return 'list';
-  if (typeof obj === 'object') return 'object';
-  return typeof obj;
-}
 
 function formatSchema() {
   return {
