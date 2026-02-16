@@ -1,36 +1,39 @@
 // Background script - uses webRequest to capture ALL network traffic
 
-let schemaData = {
-  queries: {},
-  mutations: {},
-  types: {},
-  endpoints: new Set(),
-  requestCount: 0
-};
+// Store schemas keyed by origin (domain)
+let schemas = {};
 
-// Log to console for debugging
+function getSchema(origin) {
+  if (!schemas[origin]) {
+    schemas[origin] = {
+      queries: {},
+      mutations: {},
+      types: {},
+      requestCount: 0,
+      firstSeen: new Date().toISOString()
+    };
+  }
+  return schemas[origin];
+}
+
 console.log('[GraphQL Schema Digger] Background script loaded');
 
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
-    console.log('[GraphQL Schema Digger] Request:', details.method, details.url);
-    
     if (details.method !== 'POST') return;
     
     try {
+      const origin = new URL(details.url).origin;
+      const schema = getSchema(origin);
+      
       const body = details.requestBody;
-      if (!body) {
-        console.log('[GraphQL Schema Digger] No request body');
-        return;
-      }
+      if (!body) return;
       
       let queryStr = '';
       
-      // Handle different body formats
       if (body.formData) {
         queryStr = body.formData.query?.[0] || body.formData.variables?.[0];
       } else if (body.raw) {
-        // raw body is an array of bytes
         const raw = body.raw[0];
         if (raw && raw.bytes) {
           const decoder = new TextDecoder('utf-8');
@@ -38,12 +41,7 @@ chrome.webRequest.onBeforeRequest.addListener(
         }
       }
       
-      if (!queryStr) {
-        console.log('[GraphQL Schema Digger] No query in body');
-        return;
-      }
-      
-      console.log('[GraphQL Schema Digger] Query found:', queryStr.substring(0, 100));
+      if (!queryStr) return;
       
       if (!queryStr.includes('query') && !queryStr.includes('mutation')) return;
       
@@ -62,12 +60,10 @@ chrome.webRequest.onBeforeRequest.addListener(
         } else if (queryStr.trim().startsWith('subscription')) {
           operationType = 'subscription';
         }
-      } catch (e) {
-        console.log('[GraphQL Schema Digger] Parse error:', e);
-      }
+      } catch (e) {}
       
       const fields = extractFields(queryStr);
-      const store = operationType === 'mutation' ? schemaData.mutations : schemaData.queries;
+      const store = operationType === 'mutation' ? schema.mutations : schema.queries;
       const opName = operationName || 'anonymous';
       
       if (!store[opName]) {
@@ -81,13 +77,13 @@ chrome.webRequest.onBeforeRequest.addListener(
       
       store[opName].count++;
       store[opName].lastSeen = new Date().toISOString();
-      schemaData.requestCount++;
-      schemaData.endpoints.add(details.url);
+      schema.requestCount++;
       
-      chrome.action.setBadgeText({ text: String(schemaData.requestCount) });
+      // Update badge with total count for this origin
+      chrome.action.setBadgeText({ text: String(schema.requestCount), tabId: details.tabId });
       chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
       
-      console.log('[GraphQL Schema Digger] Captured:', operationType, opName);
+      console.log('[GraphQL Schema Digger] Captured:', origin, operationType, opName);
       
     } catch (e) {
       console.log('[GraphQL Schema Digger] Error:', e);
@@ -109,27 +105,19 @@ function extractFields(query) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'get-schema') {
-    sendResponse(formatSchema());
+    // Return all schemas keyed by origin
+    sendResponse(schemas);
+  } else if (message.type === 'get-origins') {
+    sendResponse(Object.keys(schemas));
   } else if (message.type === 'clear-schema') {
-    schemaData = {
-      queries: {},
-      mutations: {},
-      types: {},
-      endpoints: new Set(),
-      requestCount: 0
-    };
+    const origin = message.origin;
+    if (origin && schemas[origin]) {
+      delete schemas[origin];
+    } else {
+      schemas = {};
+    }
     chrome.action.setBadgeText({ text: '' });
     sendResponse({ success: true });
   }
   return true;
 });
-
-function formatSchema() {
-  return {
-    endpoints: Array.from(schemaData.endpoints),
-    requestCount: schemaData.requestCount,
-    queries: schemaData.queries,
-    mutations: schemaData.mutations,
-    types: schemaData.types
-  };
-}

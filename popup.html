@@ -14,6 +14,21 @@
     }
     h1 { font-size: 16px; margin: 0 0 12px 0; color: #4CAF50; }
     h2 { font-size: 14px; margin: 16px 0 8px 0; color: #9C27B0; }
+    .origin-selector {
+      background: #16213e;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .origin-selector select {
+      width: 100%;
+      padding: 8px;
+      background: #0f0f23;
+      color: #eee;
+      border: 1px solid #333;
+      border-radius: 4px;
+      font-size: 12px;
+    }
     .stats { 
       display: flex; 
       gap: 12px; 
@@ -75,6 +90,12 @@
 <body>
   <h1>🐾 GraphQL Schema Digger</h1>
   
+  <div class="origin-selector">
+    <select id="originSelect">
+      <option value="">Loading...</option>
+    </select>
+  </div>
+  
   <div class="stats">
     <div class="stat">Requests: <strong id="requestCount">0</strong></div>
     <div class="stat">Queries: <strong id="queryCount">0</strong></div>
@@ -88,7 +109,7 @@
   </div>
   
   <div id="content" class="tab-content">
-    <div class="empty">No GraphQL requests captured yet. Navigate to a site with a GraphQL API!</div>
+    <div class="empty">Select a site to view its schema</div>
   </div>
   
   <div style="margin-top: 12px; text-align: right;">
