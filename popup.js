@@ -5,7 +5,16 @@ let schemas = {};
 let currentOrigin = '';
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadSchemas();
+  // Get current tab to determine default origin
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      try {
+        const url = new URL(tabs[0].url);
+        currentOrigin = url.origin;
+      } catch (e) {}
+    }
+    loadSchemas();
+  });
   
   // Origin selector
   document.getElementById('originSelect').addEventListener('change', (e) => {
@@ -41,30 +50,35 @@ function loadSchemas() {
 
 function updateOriginSelector() {
   const select = document.getElementById('originSelect');
-  const origins = Object.keys(schemas).sort();
+  
+  // Filter to only origins with requestCount > 0
+  const origins = Object.entries(schemas)
+    .filter(([origin, schema]) => (schema.requestCount || 0) > 0)
+    .sort((a, b) => b[1].requestCount - a[1].requestCount); // Sort by count desc
   
   if (origins.length === 0) {
-    select.innerHTML = '<option value="">No sites captured yet</option>';
+    select.innerHTML = '<option value="">No GraphQL sites captured yet</option>';
+    currentOrigin = '';
+    renderContent();
     return;
   }
   
-  // Keep current selection if still valid
-  const currentValue = currentOrigin;
+  const originList = origins.map(([origin, schema]) => origin);
   
-  select.innerHTML = origins.map(origin => {
-    const count = schemas[origin].requestCount || 0;
+  // Try to select current tab's origin, or first one
+  let selectedOrigin = currentOrigin;
+  if (!selectedOrigin || !originList.includes(selectedOrigin)) {
+    selectedOrigin = originList[0];
+  }
+  
+  currentOrigin = selectedOrigin;
+  
+  select.innerHTML = origins.map(([origin, schema]) => {
+    const count = schema.requestCount || 0;
     return `<option value="${origin}">${origin} (${count})</option>`;
   }).join('');
   
-  // Select first or restore
-  if (currentValue && origins.includes(currentValue)) {
-    select.value = currentValue;
-    currentOrigin = currentValue;
-  } else if (origins.length > 0) {
-    currentOrigin = origins[0];
-    select.value = currentOrigin;
-  }
-  
+  select.value = currentOrigin;
   renderContent();
 }
 
@@ -78,7 +92,7 @@ function renderContent() {
     requestCount.textContent = '0';
     queryCount.textContent = '0';
     mutationCount.textContent = '0';
-    content.innerHTML = '<div class="empty">No schema data for this site</div>';
+    content.innerHTML = '<div class="empty">Navigate to a site and trigger some GraphQL requests</div>';
     return;
   }
   
