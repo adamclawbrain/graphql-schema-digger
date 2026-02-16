@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "GraphQL Schema Digger",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Watch network traffic for GraphQL requests and build a schema over time",
-  "permissions": ["activeTab", "storage", "scripting", "webRequest", "webRequestBlocking"],
+  "permissions": ["activeTab", "storage", "scripting", "webRequest"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
