@@ -93,13 +93,22 @@ chrome.webRequest.onBeforeRequest.addListener(
   ["requestBody"]
 );
 
+// Extract all field names from GraphQL query recursively
 function extractFields(query) {
   const fields = new Set();
-  const fieldRegex = /^\s*(\w+)\s*[{(]/gm;
+  
+  // Match field names that are followed by : or { or ( or whitespace at word boundaries
+  // This captures nested fields too, not just top-level
+  const fieldRegex = /^\s*(\w+)\s*[:({]/gm;
   let match;
   while ((match = fieldRegex.exec(query)) !== null) {
-    fields.add(match[1]);
+    // Skip GraphQL keywords
+    const name = match[1];
+    if (!['query', 'mutation', 'subscription', 'fragment', 'on', 'true', 'false', 'null'].includes(name)) {
+      fields.add(name);
+    }
   }
+  
   return Array.from(fields);
 }
 
