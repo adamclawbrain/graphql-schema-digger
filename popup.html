@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 400px;
+      min-height: 300px;
+      margin: 0;
+      padding: 16px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { font-size: 16px; margin: 0 0 12px 0; color: #4CAF50; }
+    h2 { font-size: 14px; margin: 16px 0 8px 0; color: #9C27B0; }
+    .stats { 
+      display: flex; 
+      gap: 12px; 
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .stat { 
+      background: #16213e; 
+      padding: 8px 12px; 
+      border-radius: 6px;
+    }
+    .stat strong { color: #4CAF50; }
+    .query, .mutation {
+      background: #16213e;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .mutation { border-left: 3px solid #E91E63; }
+    .query { border-left: 3px solid #2196F3; }
+    .query-name { font-weight: bold; color: #64B5F6; }
+    .mutation .query-name { color: #F06292; }
+    .fields { color: #888; margin-top: 4px; }
+    .fields span { color: #4CAF50; }
+    .count { float: right; color: #666; font-size: 10px; }
+    .empty { color: #666; font-style: italic; text-align: center; padding: 20px; }
+    button {
+      background: #E91E63;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover { background: #C2185B; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab {
+      background: #16213e;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .tab.active { background: #4CAF50; color: #000; }
+    .tab-content { max-height: 400px; overflow-y: auto; }
+    pre { 
+      background: #0f0f23; 
+      padding: 8px; 
+      border-radius: 4px; 
+      font-size: 10px; 
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐾 GraphQL Schema Digger</h1>
+  
+  <div class="stats">
+    <div class="stat">Requests: <strong id="requestCount">0</strong></div>
+    <div class="stat">Queries: <strong id="queryCount">0</strong></div>
+    <div class="stat">Mutations: <strong id="mutationCount">0</strong></div>
+  </div>
+  
+  <div class="tabs">
+    <div class="tab active" data-tab="queries">Queries</div>
+    <div class="tab" data-tab="mutations">Mutations</div>
+    <div class="tab" data-tab="raw">Raw JSON</div>
+  </div>
+  
+  <div id="content" class="tab-content">
+    <div class="empty">No GraphQL requests captured yet. Navigate to a site with a GraphQL API!</div>
+  </div>
+  
+  <div style="margin-top: 12px; text-align: right;">
+    <button id="clearBtn">Clear Data</button>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
