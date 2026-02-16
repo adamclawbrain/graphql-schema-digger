@@ -96,12 +96,15 @@ chrome.webRequest.onBeforeRequest.addListener(
 // Extract all field names from GraphQL query
 function extractFields(query) {
   const fields = new Set();
-  const keywords = ['query', 'mutation', 'subscription', 'fragment', 'on', 'true', 'false', 'null', 'schema', 'type', 'interface', 'union', 'enum', 'scalar', 'input', 'extend'];
+  // Keywords only in schema definition context
+  const keywords = ['query', 'mutation', 'subscription', 'fragment', 'on', 'true', 'false', 'null', 'schema', 'interface', 'union', 'enum', 'scalar', 'input', 'extend'];
   
-  // Match all identifiers that could be field names
+  // Remove string literals first to avoid capturing values as fields
+  const cleaned = query.replace(/"[^"]*"/g, '""');
+  
   const wordRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
   let match;
-  while ((match = wordRegex.exec(query)) !== null) {
+  while ((match = wordRegex.exec(cleaned)) !== null) {
     if (!keywords.includes(match[1].toLowerCase())) {
       fields.add(match[1]);
     }
